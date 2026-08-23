@@ -43,15 +43,7 @@ export async function summarizeDocument(
   const signal = options?.signal;
 
   // 2. Resolve AI Provider (injected or factory-generated)
-  let provider: AIProvider;
-  try {
-    provider = options?.provider || createAIProvider();
-  } catch (err: unknown) {
-    throw new AISummarizationError(
-      `Failed to initialize AI provider: ${err instanceof Error ? err.message : String(err)}`,
-      { stage: 'provider_initialization', cause: err }
-    );
-  }
+  const provider: AIProvider = options?.provider || createAIProvider();
 
   options?.onProgress?.('validating', 0, processedDoc.chunks.length);
 
