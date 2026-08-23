@@ -1,36 +1,62 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Document Summary Assistant
 
-## Getting Started
+A production-ready technical assessment application designed to extract text from documents (via PDF.js and Tesseract.js OCR) in the browser, send the text to a secure Next.js API route, and generate structured summaries using Gemini 2.5 Flash.
 
-First, run the development server:
+## Project Purpose
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+Document Summary Assistant enables users to upload document files (PDFs, images), extracts their textual content client-side without sending raw files over the wire, and produces high-quality, structured document summaries through a secure server-side Gemini AI integration.
+
+## Tech Stack
+
+- **Framework**: [Next.js](https://nextjs.org/) (App Router)
+- **Language**: [TypeScript](https://www.typescriptlang.org/)
+- **UI & Styling**: [React 19](https://react.dev/), [Tailwind CSS v4](https://tailwindcss.com/), [shadcn/ui](https://ui.shadcn.com/)
+- **Document Processing**: [PDF.js](https://mozilla.github.io/pdf.js/) (PDF text extraction), [Tesseract.js](https://tesseract.projectnaptha.com/) (Browser OCR)
+- **AI / LLM**: [Gemini 2.5 Flash](https://ai.google.dev/) via `@google/genai`
+- **Validation**: [Zod](https://zod.dev/)
+- **Deployment**: [Vercel](https://vercel.com/)
+
+## Architecture Overview
+
+```text
+Browser
+  -> Document Upload
+  -> PDF.js / Tesseract.js client-side extraction
+  -> Extracted text
+  -> Next.js API Route (/api/summarize)
+  -> Summarization Service
+  -> Gemini Provider (gemini-2.5-flash)
+  -> Structured summary response
+  -> React UI Presentation
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+> **Security Note**: The Gemini API key is managed strictly on the server and is never exposed to the client browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Local Setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. **Clone & Install Dependencies**:
+   ```bash
+   npm install
+   ```
 
-## Learn More
+2. **Environment Variables**:
+   Copy `.env.example` to `.env.local` and add your Gemini API key:
+   ```bash
+   cp .env.example .env.local
+   ```
+   Set `GEMINI_API_KEY` in `.env.local`:
+   ```env
+   GEMINI_API_KEY=your_actual_gemini_api_key
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+3. **Run Development Server**:
+   ```bash
+   npm run dev
+   ```
+   The application will be available at [http://localhost:3000](http://localhost:3000).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+4. **Lint and Typecheck**:
+   ```bash
+   npm run lint
+   npx tsc --noEmit
+   ```
