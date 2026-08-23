@@ -4,7 +4,7 @@ import type { DocumentChunk } from './processing';
 /**
  * Supported AI Providers
  */
-export type AIProviderName = 'nvidia' | 'gemini';
+export type AIProviderName = 'groq' | 'nvidia' | 'gemini';
 
 /**
  * Provenance reference pointing back to a specific document page and chunk

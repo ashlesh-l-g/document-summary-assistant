@@ -11,9 +11,9 @@ import type {
 } from '@/types/document';
 import { normalizeExtractedText } from './text-normalizer';
 
-// Initialize PDF.js worker if running in browser
+// Initialize PDF.js worker from local static asset if running in browser
 if (typeof window !== 'undefined' && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 }
 
 export interface PdfNativeExtractionResult {

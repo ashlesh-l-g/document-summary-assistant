@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { NVIDIAProvider } from '@/lib/ai/providers/nvidia-provider';
+import { GroqProvider } from '@/lib/ai/providers/groq-provider';
 import {
   AIAuthenticationError,
   AIRateLimitError,
@@ -19,7 +19,7 @@ const sampleChunk: ChunkSummaryRequest['chunk'] = {
   approximateTokenCount: 25,
 };
 
-describe('NVIDIA Provider', () => {
+describe('Groq Provider', () => {
   it('constructs correct HTTP request payload and headers without response_format', async () => {
     let capturedUrl = '';
     let capturedInit: RequestInit | undefined;
@@ -45,9 +45,9 @@ describe('NVIDIA Provider', () => {
       return Promise.resolve(new Response(JSON.stringify(mockResponse), { status: 200 }));
     });
 
-    const provider = new NVIDIAProvider({
-      apiKey: 'nvapi-secret-key-12345',
-      model: 'meta/llama-3.3-70b-instruct',
+    const provider = new GroqProvider({
+      apiKey: 'gsk-secret-key-12345',
+      model: 'openai/gpt-oss-20b',
       customFetch: mockFetch as unknown as typeof fetch,
     });
 
@@ -57,14 +57,14 @@ describe('NVIDIA Provider', () => {
       options: { temperature: 0.1 },
     });
 
-    expect(capturedUrl).toBe('https://integrate.api.nvidia.com/v1/chat/completions');
+    expect(capturedUrl).toBe('https://api.groq.com/openai/v1/chat/completions');
     expect(capturedInit?.method).toBe('POST');
     const headers = capturedInit?.headers as Record<string, string>;
-    expect(headers['Authorization']).toBe('Bearer nvapi-secret-key-12345');
+    expect(headers['Authorization']).toBe('Bearer gsk-secret-key-12345');
     expect(headers['Content-Type']).toBe('application/json');
 
     const body = JSON.parse(String(capturedInit?.body));
-    expect(body.model).toBe('meta/llama-3.3-70b-instruct');
+    expect(body.model).toBe('openai/gpt-oss-20b');
     expect(body.temperature).toBe(0.1);
     expect(body.response_format).toBeUndefined();
     expect(body.messages).toHaveLength(2);
@@ -109,8 +109,8 @@ describe('NVIDIA Provider', () => {
       new Response(JSON.stringify(mockResponse), { status: 200 })
     );
 
-    const provider = new NVIDIAProvider({
-      apiKey: 'nvapi-key',
+    const provider = new GroqProvider({
+      apiKey: 'gsk-key',
       customFetch: mockFetch as unknown as typeof fetch,
     });
 
@@ -133,7 +133,7 @@ describe('NVIDIA Provider', () => {
     expect(summary.overview).toContain('Comprehensive overview');
     expect(summary.keyPoints).toHaveLength(2);
     expect(summary.sections).toHaveLength(1);
-    expect(summary.metadata.provider).toBe('nvidia');
+    expect(summary.metadata.provider).toBe('groq');
   });
 
   it('maps HTTP 401/403 to AIAuthenticationError without leaking API key', async () => {
@@ -141,7 +141,7 @@ describe('NVIDIA Provider', () => {
       new Response('{"error": "Unauthorized"}', { status: 401 })
     );
 
-    const provider = new NVIDIAProvider({
+    const provider = new GroqProvider({
       apiKey: 'my-super-secret-key-123',
       customFetch: mockFetch as unknown as typeof fetch,
     });
@@ -164,8 +164,8 @@ describe('NVIDIA Provider', () => {
       new Response('{"error": "Rate limit exceeded"}', { status: 429, headers })
     );
 
-    const provider = new NVIDIAProvider({
-      apiKey: 'nvapi-key',
+    const provider = new GroqProvider({
+      apiKey: 'gsk-key',
       customFetch: mockFetch as unknown as typeof fetch,
     });
 
@@ -176,7 +176,7 @@ describe('NVIDIA Provider', () => {
       expect(err).toBeInstanceOf(AIRateLimitError);
       const rateLimitErr = err as AIRateLimitError;
       expect(rateLimitErr.retryAfterSeconds).toBe(12);
-      expect(rateLimitErr.provider).toBe('nvidia');
+      expect(rateLimitErr.provider).toBe('groq');
     }
   });
 
@@ -185,8 +185,8 @@ describe('NVIDIA Provider', () => {
       new Response('Internal Server Error', { status: 500 })
     );
 
-    const provider = new NVIDIAProvider({
-      apiKey: 'nvapi-key',
+    const provider = new GroqProvider({
+      apiKey: 'gsk-key',
       customFetch: mockFetch as unknown as typeof fetch,
     });
 
@@ -216,8 +216,8 @@ describe('NVIDIA Provider', () => {
       new Response(JSON.stringify(invalidResponse), { status: 200 })
     );
 
-    const provider = new NVIDIAProvider({
-      apiKey: 'nvapi-key',
+    const provider = new GroqProvider({
+      apiKey: 'gsk-key',
       customFetch: mockFetch as unknown as typeof fetch,
     });
 
@@ -240,8 +240,8 @@ describe('NVIDIA Provider', () => {
       });
     });
 
-    const provider = new NVIDIAProvider({
-      apiKey: 'nvapi-key',
+    const provider = new GroqProvider({
+      apiKey: 'gsk-key',
       timeoutMs: 50, // Short timeout for test
       customFetch: mockFetch as unknown as typeof fetch,
     });
@@ -279,8 +279,8 @@ describe('NVIDIA Provider', () => {
       });
     });
 
-    const provider = new NVIDIAProvider({
-      apiKey: 'nvapi-key',
+    const provider = new GroqProvider({
+      apiKey: 'gsk-key',
       customFetch: mockFetch as unknown as typeof fetch,
     });
 

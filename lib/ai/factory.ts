@@ -1,9 +1,14 @@
 import type { AIProvider, AIProviderName } from '@/types/ai';
 import { AIConfigurationError } from '@/types/errors';
+import { GroqProvider, type GroqProviderOptions } from './providers/groq-provider';
 import { NVIDIAProvider, type NVIDIAProviderOptions } from './providers/nvidia-provider';
 import { GeminiProvider, type GeminiProviderOptions } from './providers/gemini-provider';
 
-export type CreateAIProviderOptions = (NVIDIAProviderOptions | GeminiProviderOptions) & {
+export type CreateAIProviderOptions = (
+  | GroqProviderOptions
+  | NVIDIAProviderOptions
+  | GeminiProviderOptions
+) & {
   provider?: AIProviderName;
 };
 
@@ -24,8 +29,12 @@ export function createAIProvider(options?: CreateAIProviderOptions): AIProvider 
 
   if (!providerName) {
     throw new AIConfigurationError(
-      'AI provider is not configured. Set the AI_PROVIDER environment variable to "nvidia" or "gemini", or provide it in configuration.'
+      'AI provider is not configured. Set the AI_PROVIDER environment variable to "groq", "nvidia", or "gemini", or provide it in configuration.'
     );
+  }
+
+  if (providerName === 'groq') {
+    return new GroqProvider(options as GroqProviderOptions);
   }
 
   if (providerName === 'nvidia') {
@@ -37,6 +46,6 @@ export function createAIProvider(options?: CreateAIProviderOptions): AIProvider 
   }
 
   throw new AIConfigurationError(
-    `Unsupported AI provider: "${providerName}". Supported providers are "nvidia" and "gemini".`
+    `Unsupported AI provider: "${providerName}". Supported providers are "groq", "nvidia", and "gemini".`
   );
 }

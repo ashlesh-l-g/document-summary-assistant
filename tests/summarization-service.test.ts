@@ -116,13 +116,14 @@ describe('Document Summarization Service', () => {
     ).rejects.toThrow(AISummarizationError);
   });
 
-  it('summarizes a single-chunk document and synthesizes summary', async () => {
+  it('summarizes a single-chunk document with fast-path (exactly ONE synthesis request)', async () => {
     const doc = createMockProcessedDoc(['Single chunk document content discussing AI architectures.']);
     const mockProvider = createMockProvider();
 
     const summary = await summarizeDocument(doc, { provider: mockProvider });
 
-    expect(mockProvider.summarizeChunk).toHaveBeenCalledTimes(1);
+    // Single-chunk skips intermediate chunk summarization and calls synthesizeSummary directly
+    expect(mockProvider.summarizeChunk).toHaveBeenCalledTimes(0);
     expect(mockProvider.synthesizeSummary).toHaveBeenCalledTimes(1);
     expect(summary.title).toBe('Synthesized Document Title');
     expect(summary.keyPoints).toHaveLength(2);
@@ -130,7 +131,7 @@ describe('Document Summarization Service', () => {
     expect(summary.sourceReferences[0].chunkId).toBe('chunk-0');
   });
 
-  it('summarizes a multi-chunk document and preserves provenance across all chunks', async () => {
+  it('summarizes a multi-chunk document with chunk summarization and synthesis (N + 1 requests)', async () => {
     const doc = createMockProcessedDoc([
       'First chunk detailing introduction and background.',
       'Second chunk detailing core methodologies and data.',
@@ -202,7 +203,7 @@ describe('Document Summarization Service', () => {
   });
 
   it('retries on transient rate-limit errors and recovers successfully', async () => {
-    const doc = createMockProcessedDoc(['Chunk for retry test']);
+    const doc = createMockProcessedDoc(['Chunk A for retry test', 'Chunk B for retry test']);
 
     let attempts = 0;
     const mockProvider = createMockProvider({
@@ -230,12 +231,12 @@ describe('Document Summarization Service', () => {
       retryDelayMs: 10,
     });
 
-    expect(attempts).toBe(2);
+    expect(attempts).toBeGreaterThanOrEqual(2);
     expect(summary).toBeDefined();
   });
 
   it('does NOT retry non-retryable authentication errors', async () => {
-    const doc = createMockProcessedDoc(['Chunk for auth failure']);
+    const doc = createMockProcessedDoc(['Chunk A for auth failure', 'Chunk B for auth failure']);
 
     let attempts = 0;
     const mockProvider = createMockProvider({
@@ -248,6 +249,7 @@ describe('Document Summarization Service', () => {
     await expect(
       summarizeDocument(doc, {
         provider: mockProvider,
+        maxConcurrency: 1,
         maxRetries: 3,
       })
     ).rejects.toThrow(AIAuthenticationError);

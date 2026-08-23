@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 import { POST } from '@/app/api/documents/summarize/route';
-import { summarizeDocumentFile } from '@/lib/application/document-summarizer';
+import {
+  summarizeDocumentFile,
+  summarizeExtractedDocument,
+} from '@/lib/application/document-summarizer';
 import { mapErrorToHttpResponse } from '@/lib/application/error-mapper';
 import {
   FileTooLargeError,
@@ -11,6 +14,7 @@ import {
   AIResponseValidationError,
 } from '@/types/errors';
 import type { AIProvider, DocumentSummary } from '@/types/ai';
+import type { ExtractedDocument } from '@/types/document';
 import { createValidPdf, createBlankPdf, createCorruptPdf } from './helpers/pdf-fixtures';
 import { MAX_FILE_SIZE_BYTES } from '@/lib/validation/file-validation';
 
@@ -66,6 +70,7 @@ describe('POST /api/documents/summarize & Application Service', () => {
   beforeEach(() => {
     process.env = { ...originalEnv };
     delete process.env.AI_PROVIDER;
+    delete process.env.GROQ_API_KEY;
     delete process.env.NVIDIA_API_KEY;
     delete process.env.GEMINI_API_KEY;
   });
@@ -75,13 +80,13 @@ describe('POST /api/documents/summarize & Application Service', () => {
   });
 
   describe('Route Request Validation', () => {
-    it('returns HTTP 400 when request is not multipart/form-data', async () => {
+    it('returns HTTP 400 when request has unsupported Content-Type', async () => {
       const req = new NextRequest('http://localhost:3000/api/documents/summarize', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'text/plain',
         },
-        body: JSON.stringify({ file: 'none' }),
+        body: 'Plain text payload',
       });
 
       const res = await POST(req);
@@ -90,7 +95,24 @@ describe('POST /api/documents/summarize & Application Service', () => {
       const json = await res.json();
       expect(json.success).toBe(false);
       expect(json.error.code).toBe('FILE_EMPTY');
-      expect(json.error.message).toContain('multipart/form-data');
+      expect(json.error.message).toContain('Unsupported Content-Type');
+    });
+
+    it('returns HTTP 422 when application/json is missing extractedDocument', async () => {
+      const req = new NextRequest('http://localhost:3000/api/documents/summarize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ wrongField: 'none' }),
+      });
+
+      const res = await POST(req);
+      expect(res.status).toBe(422);
+
+      const json = await res.json();
+      expect(json.success).toBe(false);
+      expect(json.error.code).toBe('EMPTY_EXTRACTION');
     });
 
     it('returns HTTP 400 when "file" field is missing in form-data', async () => {
@@ -111,7 +133,7 @@ describe('POST /api/documents/summarize & Application Service', () => {
       expect(json.error.message).toContain('Missing "file" field');
     });
 
-    it('returns HTTP 400 for invalid file type (non-PDF)', async () => {
+    it('returns HTTP 400 for invalid file type (non-PDF in multipart)', async () => {
       const textBlob = new Blob(['Plain text document content'], { type: 'text/plain' });
       const file = new File([textBlob], 'document.txt', { type: 'text/plain' });
 
@@ -236,7 +258,7 @@ describe('POST /api/documents/summarize & Application Service', () => {
       const file = new File([pdfBytes.buffer as ArrayBuffer], 'test.pdf', { type: 'application/pdf' });
 
       const failingProvider = createMockAIProvider({
-        summarizeChunk: vi.fn().mockRejectedValue(
+        synthesizeSummary: vi.fn().mockRejectedValue(
           new AIAuthenticationError('Invalid secret key xyz123', 'nvidia')
         ),
       });
@@ -251,7 +273,7 @@ describe('POST /api/documents/summarize & Application Service', () => {
       const file = new File([pdfBytes.buffer as ArrayBuffer], 'test.pdf', { type: 'application/pdf' });
 
       const rateLimitedProvider = createMockAIProvider({
-        summarizeChunk: vi.fn().mockRejectedValue(
+        synthesizeSummary: vi.fn().mockRejectedValue(
           new AIRateLimitError('Rate limit exceeded', 'nvidia', { retryAfterSeconds: 30 })
         ),
       });
@@ -277,7 +299,7 @@ describe('POST /api/documents/summarize & Application Service', () => {
   });
 
   describe('End-to-End Successful Flow with Mocked AI Provider', () => {
-    it('successfully extracts, processes, and summarizes a valid PDF', async () => {
+    it('successfully extracts, processes, and summarizes a valid PDF via multipart file upload', async () => {
       const pdfBytes = createValidPdf(
         'Quarterly earnings report demonstrating remarkable operational resilience and 18% revenue expansion.'
       );
@@ -304,15 +326,51 @@ describe('POST /api/documents/summarize & Application Service', () => {
       expect(result.extraction.pageCount).toBe(1);
       expect(result.extraction.fileName).toBe('quarterly_report.pdf');
       expect(result.extraction.totalCharCount).toBeGreaterThan(0);
+      expect(result.extraction.fileSizeBytes).toBeGreaterThan(0);
 
       // Verify processing metadata
       expect(result.processing.totalChunks).toBe(1);
       expect(result.processing.totalApproximateTokens).toBeGreaterThan(0);
       expect(result.processing.totalCharCount).toBeGreaterThan(0);
 
-      // Verify mock calls
-      expect(mockProvider.summarizeChunk).toHaveBeenCalledTimes(1);
+      // Single-chunk fast-path uses exactly 1 synthesis call
       expect(mockProvider.synthesizeSummary).toHaveBeenCalledTimes(1);
+    });
+
+    it('successfully summarizes a pre-extracted ExtractedDocument via application/json payload', async () => {
+      const mockExtractedDoc: ExtractedDocument = {
+        text: 'Client-side extracted text from image receipt via Tesseract OCR.',
+        pages: [
+          {
+            pageNumber: 1,
+            text: 'Client-side extracted text from image receipt via Tesseract OCR.',
+            method: 'ocr',
+            charCount: 65,
+            isScanned: true,
+          },
+        ],
+        method: 'ocr',
+        metadata: {
+          pageCount: 1,
+          fileName: 'receipt.png',
+          fileSizeBytes: 1024,
+          isScanned: true,
+        },
+        totalCharCount: 65,
+      };
+
+      const mockProvider = createMockAIProvider();
+
+      const result = await summarizeExtractedDocument(mockExtractedDoc, {
+        provider: mockProvider,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.extraction.method).toBe('ocr');
+      expect(result.extraction.fileName).toBe('receipt.png');
+      expect(result.extraction.fileSizeBytes).toBe(1024);
+      expect(result.summary.title).toBe('Executive Financial Summary');
+      expect(result.processing.totalChunks).toBe(1);
     });
 
     it('guarantees safe error responses with no sensitive leaks', async () => {
@@ -320,7 +378,7 @@ describe('POST /api/documents/summarize & Application Service', () => {
       const file = new File([pdfBytes.buffer as ArrayBuffer], 'test.pdf', { type: 'application/pdf' });
 
       const providerWithSecrets = createMockAIProvider({
-        summarizeChunk: vi.fn().mockRejectedValue(
+        synthesizeSummary: vi.fn().mockRejectedValue(
           new AIProviderError('Failed at internal endpoint with secret key sk-test-999', 'nvidia', {
             statusCode: 500,
           })

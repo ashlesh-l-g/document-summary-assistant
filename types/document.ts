@@ -55,7 +55,7 @@ export interface ExtractionProgress {
 export type ProgressCallback = (progress: ExtractionProgress) => void;
 
 export type OcrImageRecognizer = (
-  imageSource: ImageData | HTMLCanvasElement | Uint8Array | Buffer | string,
+  imageSource: ImageData | HTMLCanvasElement | Uint8Array | Buffer | string | Blob | File,
   options?: { language?: string; pageNumber?: number }
 ) => Promise<{ text: string; confidence?: number }>;
 

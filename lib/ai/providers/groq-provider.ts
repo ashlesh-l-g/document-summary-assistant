@@ -22,37 +22,37 @@ import {
   buildDocumentSynthesisPrompt,
 } from '@/lib/ai/prompts';
 
-export const DEFAULT_NVIDIA_MODEL = 'meta/llama-3.3-70b-instruct';
-export const DEFAULT_NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
-export const DEFAULT_NVIDIA_TIMEOUT_MS = 60_000;
+export const DEFAULT_GROQ_MODEL = 'openai/gpt-oss-20b';
+export const DEFAULT_GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
+export const DEFAULT_GROQ_TIMEOUT_MS = 60_000;
 
-export interface NVIDIAProviderOptions extends Partial<AIProviderConfig> {
+export interface GroqProviderOptions extends Partial<AIProviderConfig> {
   readonly customFetch?: typeof fetch;
   readonly timeoutMs?: number;
 }
 
-export class NVIDIAProvider implements AIProvider {
-  readonly name: AIProviderName = 'nvidia';
+export class GroqProvider implements AIProvider {
+  readonly name: AIProviderName = 'groq';
   readonly modelName: string;
   private readonly apiKey: string;
   private readonly baseURL: string;
   private readonly fetchFn: typeof fetch;
   private readonly timeoutMs: number;
 
-  constructor(options?: NVIDIAProviderOptions) {
-    const apiKey = options?.apiKey || process.env.NVIDIA_API_KEY;
+  constructor(options?: GroqProviderOptions) {
+    const apiKey = options?.apiKey || process.env.GROQ_API_KEY;
 
     if (!apiKey || apiKey.trim().length === 0) {
       throw new AIConfigurationError(
-        'NVIDIA API key is missing. Set NVIDIA_API_KEY environment variable or pass apiKey in config.'
+        'Groq API key is missing. Set GROQ_API_KEY environment variable or pass apiKey in config.'
       );
     }
 
     this.apiKey = apiKey.trim();
-    this.modelName = options?.model || process.env.NVIDIA_MODEL || DEFAULT_NVIDIA_MODEL;
-    this.baseURL = (options?.baseURL || process.env.NVIDIA_BASE_URL || DEFAULT_NVIDIA_BASE_URL).replace(/\/+$/, '');
+    this.modelName = options?.model || process.env.GROQ_MODEL || DEFAULT_GROQ_MODEL;
+    this.baseURL = (options?.baseURL || process.env.GROQ_BASE_URL || DEFAULT_GROQ_BASE_URL).replace(/\/+$/, '');
     this.fetchFn = options?.customFetch || (typeof fetch !== 'undefined' ? fetch.bind(globalThis) : fetch);
-    this.timeoutMs = options?.timeoutMs ?? DEFAULT_NVIDIA_TIMEOUT_MS;
+    this.timeoutMs = options?.timeoutMs ?? DEFAULT_GROQ_TIMEOUT_MS;
   }
 
   private async callChatCompletion(
@@ -108,7 +108,7 @@ export class NVIDIAProvider implements AIProvider {
       });
     } catch (err: unknown) {
       if (options?.signal?.aborted) {
-        throw new AIProviderError('NVIDIA API request was aborted by client.', this.name, {
+        throw new AIProviderError('Groq API request was aborted by client.', this.name, {
           isRetryable: false,
           cause: err,
         });
@@ -116,7 +116,7 @@ export class NVIDIAProvider implements AIProvider {
 
       if (timedOut) {
         throw new AIProviderError(
-          `NVIDIA API request timed out after ${Math.round(this.timeoutMs / 1000)} seconds.`,
+          `Groq API request timed out after ${Math.round(this.timeoutMs / 1000)} seconds.`,
           this.name,
           {
             statusCode: 408,
@@ -131,7 +131,7 @@ export class NVIDIAProvider implements AIProvider {
       }
 
       throw new AIProviderError(
-        'NVIDIA API network connection failed.',
+        'Groq API network connection failed.',
         this.name,
         {
           isRetryable: true,
@@ -157,7 +157,7 @@ export class NVIDIAProvider implements AIProvider {
 
       if (statusCode === 401 || statusCode === 403) {
         throw new AIAuthenticationError(
-          'NVIDIA API authentication failed. Verify that your NVIDIA_API_KEY is valid.',
+          'Groq API authentication failed. Verify that your GROQ_API_KEY is valid.',
           this.name,
           { details: { statusCode } }
         );
@@ -167,7 +167,7 @@ export class NVIDIAProvider implements AIProvider {
         const retryAfterHeader = response.headers.get('retry-after');
         const retryAfterSeconds = retryAfterHeader ? parseInt(retryAfterHeader, 10) : undefined;
         throw new AIRateLimitError(
-          'NVIDIA API rate limit exceeded.',
+          'Groq API rate limit exceeded.',
           this.name,
           {
             retryAfterSeconds: isNaN(retryAfterSeconds ?? NaN) ? undefined : retryAfterSeconds,
@@ -178,7 +178,7 @@ export class NVIDIAProvider implements AIProvider {
 
       const isRetryable = statusCode >= 500 || statusCode === 408;
       throw new AIProviderError(
-        `NVIDIA API request failed with status ${statusCode}.`,
+        `Groq API request failed with status ${statusCode}.`,
         this.name,
         {
           statusCode,
@@ -194,7 +194,7 @@ export class NVIDIAProvider implements AIProvider {
       payload = await response.json();
     } catch (err) {
       throw new AIProviderError(
-        'NVIDIA API returned invalid JSON in HTTP response.',
+        'Groq API returned invalid JSON in HTTP response.',
         this.name,
         { isRetryable: true, cause: err }
       );
@@ -203,7 +203,7 @@ export class NVIDIAProvider implements AIProvider {
     const content = payload?.choices?.[0]?.message?.content;
     if (typeof content !== 'string' || content.trim().length === 0) {
       throw new AIProviderError(
-        'NVIDIA API returned empty choices or message content.',
+        'Groq API returned empty choices or message content.',
         this.name,
         { isRetryable: false }
       );

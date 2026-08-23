@@ -153,6 +153,15 @@ describe('Document Extraction Pipeline', () => {
       );
     });
 
+    it('correctly sets and falls back to byteLength for fileSizeBytes', async () => {
+      const pdfBytes = createValidPdf('PDF file size metadata verification content.');
+      const file = new File([pdfBytes.buffer as ArrayBuffer], 'sized_doc.pdf', { type: 'application/pdf' });
+      
+      const doc = await extractDocument(file, { ocrThreshold: 10 });
+      expect(doc.metadata.fileSizeBytes).toBe(pdfBytes.byteLength);
+      expect(doc.metadata.fileSizeBytes).toBeGreaterThan(0);
+    });
+
     it('throws EmptyExtractionError when document contains no readable text and OCR produces nothing', async () => {
       const blankPdf = createBlankPdf();
 

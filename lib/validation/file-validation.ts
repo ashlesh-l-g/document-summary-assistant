@@ -29,6 +29,13 @@ export const ACCEPTED_PDF_MIME_TYPES = [
   'text/x-pdf',
 ] as const;
 
+export const ACCEPTED_IMAGE_MIME_TYPES = [
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/webp',
+] as const;
+
 /**
  * Standard PDF Magic Bytes: "%PDF" (0x25, 0x50, 0x44, 0x46)
  */
@@ -77,6 +84,68 @@ export function hasPdfMagicBytes(buffer: ArrayBuffer | Uint8Array): boolean {
     }
   }
   return true;
+}
+
+/**
+ * Check if the filename ends with an accepted image extension (.png, .jpg, .jpeg, .webp)
+ */
+export function hasImageExtension(fileName: string): boolean {
+  return typeof fileName === 'string' && /\.(png|jpe?g|webp)$/i.test(fileName.trim());
+}
+
+/**
+ * Check if the MIME type is a recognized image MIME type
+ */
+export function isImageMimeType(mimeType?: string): boolean {
+  if (!mimeType) return false;
+  const normalized = mimeType.trim().toLowerCase();
+  return ACCEPTED_IMAGE_MIME_TYPES.some((t) => t === normalized);
+}
+
+/**
+ * Validate metadata for an uploaded image file
+ */
+export function validateImageMetadata(metadata: {
+  name: string;
+  size: number;
+  type?: string;
+}): FileInputMetadata {
+  if (metadata.size <= 0) {
+    throw new EmptyFileError('Uploaded image file is empty (0 bytes).', {
+      fileName: metadata.name,
+      fileSize: metadata.size,
+    });
+  }
+
+  if (metadata.size > MAX_FILE_SIZE_BYTES) {
+    throw new FileTooLargeError(
+      `Image file size (${(metadata.size / (1024 * 1024)).toFixed(1)}MB) exceeds maximum limit of 20MB.`,
+      {
+        fileName: metadata.name,
+        fileSize: metadata.size,
+        maxSize: MAX_FILE_SIZE_BYTES,
+      }
+    );
+  }
+
+  const isImgExt = hasImageExtension(metadata.name);
+  const isImgMime = isImageMimeType(metadata.type);
+
+  if (!isImgExt && !isImgMime) {
+    throw new InvalidFileTypeError(
+      `Invalid file "${metadata.name}". Only images (PNG, JPG, JPEG, WEBP) are supported.`,
+      {
+        fileName: metadata.name,
+        fileType: metadata.type,
+      }
+    );
+  }
+
+  return {
+    name: metadata.name,
+    size: metadata.size,
+    type: metadata.type || 'image/png',
+  };
 }
 
 /**

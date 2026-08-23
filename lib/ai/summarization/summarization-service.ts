@@ -20,7 +20,7 @@ export const DEFAULT_TEMPERATURE = 0.2;
  *
  * Coordinates:
  * 1. ProcessedDocument validation
- * 2. Concurrent chunk-level summarization with transient-fault retries
+ * 2. Single-chunk fast path (1 direct synthesis request) OR concurrent chunk-level summarization with transient-fault retries
  * 3. Document-level synthesis deduplicating and grouping themes
  * 4. Provenance preservation and final schema validation
  */
@@ -49,9 +49,52 @@ export async function summarizeDocument(
 
   const documentTitle = processedDoc.metadata?.title || processedDoc.metadata?.fileName;
   const totalChunks = processedDoc.chunks.length;
+
+  // Fast path for single-chunk documents: Skip intermediate chunk summarization and synthesize directly in 1 LLM call
+  if (totalChunks === 1) {
+    const singleChunk = processedDoc.chunks[0];
+    options?.onProgress?.('synthesizing', 0, 1);
+
+    if (signal?.aborted) {
+      throw new AISummarizationError('Summarization operation was aborted.', {
+        stage: 'synthesizing',
+      });
+    }
+
+    const documentSummary = await withRetry(
+      async () => {
+        return await provider.synthesizeSummary({
+          chunkSummaries: [
+            {
+              chunkId: singleChunk.id,
+              startPage: singleChunk.startPage,
+              endPage: singleChunk.endPage,
+              pageNumbers: singleChunk.pageNumbers,
+              summary: singleChunk.text,
+              keyPoints: [],
+            },
+          ],
+          documentTitle,
+          documentMetadata: processedDoc.metadata,
+          options: {
+            temperature,
+            signal,
+          },
+        });
+      },
+      {
+        maxRetries,
+        baseDelayMs,
+      }
+    );
+
+    options?.onProgress?.('completed', 1, 1);
+    return documentSummary;
+  }
+
   let completedChunks = 0;
 
-  // 3. Concurrent Chunk Summarization
+  // 3. Concurrent Chunk Summarization for multi-chunk documents
   const chunkSummaries: ChunkSummary[] = await asyncPool(
     maxConcurrency,
     processedDoc.chunks,
@@ -93,7 +136,7 @@ export async function summarizeDocument(
     );
   }
 
-  // 4. Document-Level Synthesis
+  // 4. Document-Level Synthesis for multi-chunk documents
   options?.onProgress?.('synthesizing', 0, 1);
 
   if (signal?.aborted) {

@@ -32,10 +32,11 @@ export async function resolveInputBuffer(
   if (typeof Blob !== 'undefined' && input instanceof Blob) {
     const arrayBuffer = await input.arrayBuffer();
     const fileName = 'name' in input ? (input as File).name : undefined;
+    const actualSize = input.size > 0 ? input.size : arrayBuffer.byteLength;
     return {
       buffer: new Uint8Array(arrayBuffer),
       fileName,
-      fileSize: input.size,
+      fileSize: actualSize,
       mimeType: input.type,
     };
   }
@@ -179,6 +180,7 @@ export async function extractDocument(
     method,
     metadata: {
       ...metadata,
+      fileSizeBytes: metadata.fileSizeBytes || (fileSize > 0 ? fileSize : buffer.byteLength),
       isScanned: ocrPageCount > 0,
     },
     totalCharCount,
