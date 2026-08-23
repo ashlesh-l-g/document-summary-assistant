@@ -1,5 +1,5 @@
 /**
- * Document Summary Assistant - Extraction & Ingestion Error Types
+ * Document Summary Assistant - Error Hierarchy
  */
 
 export type ExtractionErrorCode =
@@ -167,5 +167,150 @@ export class ChunkingError extends DocumentProcessingError {
   ) {
     super(message, 'CHUNKING_FAILED', details, cause);
     this.name = 'ChunkingError';
+  }
+}
+
+/**
+ * AI Provider & Summarization Error Types
+ */
+
+export type AIErrorCode =
+  | 'AI_CONFIGURATION_ERROR'
+  | 'AI_PROVIDER_ERROR'
+  | 'AI_RATE_LIMIT_ERROR'
+  | 'AI_AUTHENTICATION_ERROR'
+  | 'AI_RESPONSE_VALIDATION_ERROR'
+  | 'AI_SUMMARIZATION_ERROR'
+  | 'AI_TIMEOUT_ERROR';
+
+export class AIError extends Error {
+  readonly code: AIErrorCode;
+  readonly details?: ExtractionErrorDetails;
+  override readonly cause?: unknown;
+
+  constructor(
+    message: string,
+    code: AIErrorCode,
+    details?: ExtractionErrorDetails,
+    cause?: unknown
+  ) {
+    super(message);
+    this.name = 'AIError';
+    this.code = code;
+    this.details = details;
+    this.cause = cause;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+export class AIConfigurationError extends AIError {
+  constructor(
+    message: string,
+    details?: ExtractionErrorDetails
+  ) {
+    super(message, 'AI_CONFIGURATION_ERROR', details);
+    this.name = 'AIConfigurationError';
+  }
+}
+
+export class AIProviderError extends AIError {
+  readonly provider: string;
+  readonly statusCode?: number;
+  readonly isRetryable: boolean;
+
+  constructor(
+    message: string,
+    provider: string,
+    options?: {
+      statusCode?: number;
+      isRetryable?: boolean;
+      details?: ExtractionErrorDetails;
+      cause?: unknown;
+    }
+  ) {
+    super(message, 'AI_PROVIDER_ERROR', options?.details, options?.cause);
+    this.name = 'AIProviderError';
+    this.provider = provider;
+    this.statusCode = options?.statusCode;
+    this.isRetryable = options?.isRetryable ?? false;
+  }
+}
+
+export class AIRateLimitError extends AIError {
+  readonly provider: string;
+  readonly retryAfterSeconds?: number;
+
+  constructor(
+    message: string,
+    provider: string,
+    options?: {
+      retryAfterSeconds?: number;
+      details?: ExtractionErrorDetails;
+      cause?: unknown;
+    }
+  ) {
+    super(message, 'AI_RATE_LIMIT_ERROR', options?.details, options?.cause);
+    this.name = 'AIRateLimitError';
+    this.provider = provider;
+    this.retryAfterSeconds = options?.retryAfterSeconds;
+  }
+}
+
+export class AIAuthenticationError extends AIError {
+  readonly provider: string;
+
+  constructor(
+    message: string,
+    provider: string,
+    options?: {
+      details?: ExtractionErrorDetails;
+      cause?: unknown;
+    }
+  ) {
+    super(message, 'AI_AUTHENTICATION_ERROR', options?.details, options?.cause);
+    this.name = 'AIAuthenticationError';
+    this.provider = provider;
+  }
+}
+
+export class AIResponseValidationError extends AIError {
+  readonly provider?: string;
+  readonly validationErrors?: unknown;
+
+  constructor(
+    message: string,
+    options?: {
+      provider?: string;
+      validationErrors?: unknown;
+      snippet?: string;
+      cause?: unknown;
+    }
+  ) {
+    super(
+      message,
+      'AI_RESPONSE_VALIDATION_ERROR',
+      options ? { snippet: options.snippet, provider: options.provider } : undefined,
+      options?.cause
+    );
+    this.name = 'AIResponseValidationError';
+    this.provider = options?.provider;
+    this.validationErrors = options?.validationErrors;
+  }
+}
+
+export class AISummarizationError extends AIError {
+  readonly stage?: string;
+
+  constructor(
+    message: string,
+    options?: {
+      stage?: string;
+      details?: ExtractionErrorDetails;
+      cause?: unknown;
+    }
+  ) {
+    super(message, 'AI_SUMMARIZATION_ERROR', options?.details, options?.cause);
+    this.name = 'AISummarizationError';
+    this.stage = options?.stage;
   }
 }
