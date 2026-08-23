@@ -3,10 +3,82 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Next.js](https://img.shields.io/badge/Next.js-16.x-black.svg?logo=next.js&logoColor=white)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19.x-61dafb.svg?logo=react&logoColor=black)](https://react.dev/)
-[![Tests](https://img.shields.io/badge/Tests-100%2B%20Passing-brightgreen.svg?logo=vitest&logoColor=white)](https://vitest.dev/)
+[![Tests](https://img.shields.io/badge/Tests-103%20Passing-brightgreen.svg?logo=vitest&logoColor=white)](https://vitest.dev/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 An enterprise-grade document intelligence and structured summarization platform engineered for precision, fault tolerance, and high performance. It processes native PDFs, scanned documents, and image formats using client-side extraction and browser-based OCR, hierarchically chunks content with sentence boundary preservation, and generates schema-validated structured summaries with verifiable page-level provenance through a swappable AI provider architecture.
+
+---
+
+## Live Demo
+
+Live Application:
+https://document-summary-assistant-nu-lilac.vercel.app/
+
+Status:
+Production deployment
+
+---
+
+## Repository
+
+GitHub Repository:
+https://github.com/ashlesh-l-g/document-summary-assistant
+
+---
+
+## Project Summary
+
+Project:
+Document Summary Assistant
+
+Purpose:
+AI-powered document analysis and structured summarization for PDFs and images.
+
+Primary AI Provider:
+Groq
+
+AI Model:
+openai/gpt-oss-20b
+
+Framework:
+Next.js
+
+Language:
+TypeScript
+
+OCR:
+Tesseract.js
+
+PDF Processing:
+PDF.js
+
+---
+
+## Requirements & Implementation Status
+
+| Requirement | Implementation | Status |
+|---|---|---|
+| PDF upload | PDF.js client-side text stream parsing | Complete |
+| Image upload | PNG, JPG, JPEG, WEBP formats | Complete |
+| Browser OCR | Tesseract.js Web Worker integration | Complete |
+| Structured AI summarization | Groq Chat Completions API + Zod schema validation | Complete |
+| Summary detail levels | Short (~1,000 chars), Medium (~1,800 chars), Long (~2,800 chars) | Complete |
+| Provenance tracking | Source page numbers and chunk ID mappings | Complete |
+| Markdown export | One-click clipboard copy and .md file download | Complete |
+| Production deployment | Vercel Serverless Platform | Complete |
+
+---
+
+## Deployment
+
+Platform:
+Vercel
+
+Production URL:
+https://document-summary-assistant-nu-lilac.vercel.app/
+
+The application is deployed on the Vercel platform as a Next.js App Router application. The active AI provider credentials (`GROQ_API_KEY`, `GROQ_BASE_URL`, `GROQ_MODEL`) are securely configured as server-side environment variables and are never exposed to client browsers.
 
 ---
 
@@ -38,6 +110,21 @@ This architecture is built on deliberate production engineering decisions design
 ---
 
 ## Architecture
+
+### Execution Flow
+
+1. User uploads PDF or image in the browser.
+2. Browser extracts text using PDF.js.
+3. Low-text/scanned pages and images trigger client-side Tesseract.js OCR in a Web Worker.
+4. Browser produces a normalized `ExtractedDocument` payload.
+5. `ExtractedDocument` is sent via `POST /api/documents/summarize`.
+6. Server processes and chunks the document along paragraph and sentence boundaries.
+7. AI provider generates structured summaries (single-chunk fast path or concurrent `asyncPool`).
+8. Zod schema validation verifies the AI output structure.
+9. Provenance map links findings and sections to source pages and chunk IDs.
+10. UI renders the structured summary, source badges, and supports Markdown copy/download.
+
+### Architecture Diagram
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────────┐
@@ -116,13 +203,42 @@ This architecture is built on deliberate production engineering decisions design
 
 ---
 
+## AI Providers
+
+### Active Production Provider
+
+Active AI Provider:
+Groq
+
+Active Model:
+openai/gpt-oss-20b
+
+Base URL:
+https://api.groq.com/openai/v1
+
+Implementation:
+`GroqProvider` in `lib/ai/providers/groq-provider.ts` utilizing Groq's OpenAI-compatible Chat Completions API with bounded request timeouts and AbortSignal propagation.
+
+### Supported Alternative Providers
+
+The codebase maintains full, production-tested implementations for alternative providers that can be activated by changing `AI_PROVIDER` in environment configuration:
+
+* **NVIDIA NIM**: `meta/llama-3.3-70b-instruct` (`NVIDIAProvider` in `lib/ai/providers/nvidia-provider.ts`)
+* **Google Gemini**: `gemini-2.5-flash` (`GeminiProvider` in `lib/ai/providers/gemini-provider.ts`)
+
+---
+
 ## Key Engineering Decisions
 
 ### 1. Browser-Side Extraction & OCR
 * **Rationale**: Server-side PDF rasterization and OCR require heavy native system binaries (e.g., Poppler, Tesseract C++ binaries, Ghostscript) and significant CPU/memory resources, leading to severe serverless bottlenecks.
 * **Implementation**: Uses `pdfjs-dist` to parse native text layers directly in the browser. For scanned PDFs or images, `tesseract.js` executes inside a dedicated browser Web Worker. If a PDF page contains fewer than 50 characters of native text, it automatically triggers page-level OCR fallback.
 
-### 2. Provider Abstraction Architecture
+### 2. Server-Safe Dynamic Import Isolation
+* **Rationale**: In Node.js serverless runtimes (such as Vercel Functions), loading browser-targeted packages like `pdfjs-dist` at the top level causes runtime errors (e.g., `ReferenceError: DOMMatrix is not defined`).
+* **Implementation**: The primary JSON API summarization path (`summarizeExtractedDocument`) imports only pure TypeScript validation and AI modules. File extraction is isolated behind dynamic imports (`import('@/lib/extraction/document-extractor')`), ensuring `pdfjs-dist` is never evaluated during serverless initialization or standard JSON summarization requests.
+
+### 3. Provider Abstraction Architecture
 * **Rationale**: Prevents vendor lock-in and allows seamless switching between LLM providers based on latency, cost, or availability constraints.
 * **Implementation**: All providers implement the standard `AIProvider` contract:
   ```typescript
@@ -133,10 +249,8 @@ This architecture is built on deliberate production engineering decisions design
     synthesizeSummary(request: DocumentSynthesisRequest): Promise<DocumentSummary>;
   }
   ```
-* **Active Provider**: **Groq API** (`openai/gpt-oss-20b` at `https://api.groq.com/openai/v1`).
-* **Alternative Providers**: The codebase maintains full, production-tested implementations for **NVIDIA NIM** (`meta/llama-3.3-70b-instruct`) and **Google Gemini** (`gemini-2.5-flash`), switchable instantly via `AI_PROVIDER=groq|nvidia|gemini`.
 
-### 3. Defensive Structured AI Validation
+### 4. Defensive Structured AI Validation
 * **Rationale**: LLMs occasionally return markdown formatting, code fences, conversational preambles, or malformed schema keys.
 * **Implementation**: Employs a multi-phase parsing pipeline:
   1. Direct `JSON.parse` attempt.
@@ -145,18 +259,18 @@ This architecture is built on deliberate production engineering decisions design
   4. Comprehensive schema validation via **Zod** (`chunkSummaryResponseSchema`, `documentSynthesisResponseSchema`).
   5. Any structural violation immediately throws a typed `AIResponseValidationError` mapping to HTTP 502 (Bad Gateway).
 
-### 4. Production Reliability & Fault Isolation
+### 5. Production Reliability & Fault Isolation
 * **Bounded Timeouts**: All provider requests wrap fetch calls with `AbortController` and an explicit 60-second timer to eliminate hanging connections.
 * **Client Cancellation Propagation**: When a user cancels a request or closes the browser tab, `req.signal` propagates through the pipeline to immediately abort upstream LLM calls and conserve compute quota.
 * **Intelligent Retry Loop**: `withRetry` uses exponential backoff with jitter. Transient HTTP 429 (Rate Limit) and 5xx (Server Error) responses are retried up to 3 times; permanent failures (401 Auth, 403 Forbidden, 422 Invalid Input) fail fast without wasteful retries.
 * **Error Sanitization**: `mapErrorToHttpResponse` intercepts all errors, redacting filesystem paths, internal URLs, and Bearer authorization tokens before returning safe error payloads to the client.
 
-### 5. Performance Optimizations
+### 6. Performance Optimizations
 * **Single-Chunk Fast Path**: When a document fits within a single chunk, intermediate chunk summarization is bypassed completely. The orchestrator executes exactly 1 synthesis LLM call, reducing latency by over 50%.
 * **Concurrent Async Pool**: For multi-chunk documents, `asyncPool` executes chunk summarizations with bounded concurrency (default: 3 concurrent requests), maximizing throughput without triggering provider rate limits.
 * **Minimal Over-The-Wire Payloads**: The browser uploads normalized text and metadata rather than multi-megabyte PDF binaries, reducing network transit time to milliseconds.
 
-### 6. Strict Provenance Tracking
+### 7. Strict Provenance Tracking
 * **Rationale**: Enterprise document summaries must be verifiable against source pages to eliminate ungrounded hallucinations.
 * **Implementation**: Every chunk preserves its `startPage`, `endPage`, and `pageNumbers` array. During synthesis, section headings and key findings link back to `sourcePages`, while `sourceReferences` record page numbers, chunk IDs, and relevance descriptions.
 
@@ -193,6 +307,16 @@ This architecture is built on deliberate production engineering decisions design
 | **Alternative AI** | [NVIDIA NIM](https://build.nvidia.com/), [Google Gemini](https://ai.google.dev/) | Enterprise alternative providers (`meta/llama-3.3-70b`, `gemini-2.5-flash`) |
 | **Schema Validation** | [Zod 4](https://zod.dev/) | Runtime contract validation for requests, extractions, and AI outputs |
 | **Test Suite** | [Vitest 4](https://vitest.dev/) | Fast unit, integration, and provider test execution |
+
+---
+
+## Security
+
+* **Server-Side API Key Encapsulation**: `GROQ_API_KEY` (and alternative keys) are stored purely as server-side environment variables and are never bundled into client assets.
+* **No `NEXT_PUBLIC_` Key Leakage**: Client code contains no reference to AI provider credentials.
+* **In-Memory Stream Processing**: Document text and chunk data are processed in memory during the request lifecycle and are not persisted to disk or external databases.
+* **Sanitized Error Payloads**: Domain error messages are stripped of file system paths, internal IP addresses, and authentication tokens before being sent over HTTP.
+* **Client-Side Compute Offloading**: Performing OCR in the browser prevents denial-of-service vulnerabilities and CPU exhaustion on serverless endpoints.
 
 ---
 
@@ -273,7 +397,7 @@ This architecture is built on deliberate production engineering decisions design
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/your-username/document-summary-assistant.git
+   git clone https://github.com/ashlesh-l-g/document-summary-assistant.git
    cd document-summary-assistant
    ```
 
@@ -328,7 +452,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 The codebase includes comprehensive unit and integration test suites verifying extraction, chunking, provider abstractions, error handling, and API routes:
 
 ```bash
-# Run full Vitest test suite (100+ tests)
+# Run full Vitest test suite (103 tests)
 npm test
 
 # Run TypeScript typecheck
@@ -340,6 +464,22 @@ npm run lint
 # Build production bundle
 npm run build
 ```
+
+---
+
+## Submission
+
+Live Application:
+https://document-summary-assistant-nu-lilac.vercel.app/
+
+GitHub Repository:
+https://github.com/ashlesh-l-g/document-summary-assistant
+
+Technology:
+Next.js, TypeScript, React, PDF.js, Tesseract.js, Groq
+
+Purpose:
+Technical assessment implementation demonstrating document extraction, OCR, AI summarization, structured validation, provenance tracking, reliability handling, and production deployment.
 
 ---
 
