@@ -7,7 +7,6 @@ import type {
   SummarizeDocumentResponse,
 } from '@/types';
 import { EmptyExtractionError, EmptyFileError } from '@/types/errors';
-import { extractDocument } from '@/lib/extraction';
 import { processDocument } from '@/lib/processing';
 import { summarizeDocument } from '@/lib/ai';
 import { validateExtractedDocument } from '@/lib/validation/document-validation';
@@ -86,7 +85,8 @@ export async function summarizeDocumentFile(
     throw new EmptyFileError('No file was provided for summarization.');
   }
 
-  // 1. Ingest & Extract document text and metadata
+  // 1. Ingest & Extract document text and metadata (dynamic import ensures pdfjs-dist is not loaded for JSON requests)
+  const { extractDocument } = await import('@/lib/extraction/document-extractor');
   const extractedDoc = await extractDocument(file, options?.extractionOptions);
 
   // 2. Delegate to summarizeExtractedDocument
