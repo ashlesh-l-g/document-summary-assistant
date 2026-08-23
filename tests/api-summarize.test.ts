@@ -337,5 +337,22 @@ describe('POST /api/documents/summarize & Application Service', () => {
         expect(err).toBeInstanceOf(AIProviderError);
       }
     });
+
+    it('sanitizes internal file paths and secrets from extraction error responses', async () => {
+      const { DocumentExtractionError } = await import('@/types/errors');
+      const mapped = mapErrorToHttpResponse(
+        new DocumentExtractionError(
+          'Failed to parse PDF: corrupt table at /var/www/internal/app/document.pdf with token key=secret123',
+          'EXTRACTION_FAILED'
+        )
+      );
+
+      expect(mapped.status).toBe(422);
+      expect(mapped.body.error.code).toBe('EXTRACTION_FAILED');
+      expect(mapped.body.error.message).not.toContain('/var/www/internal/app');
+      expect(mapped.body.error.message).not.toContain('secret123');
+      expect(mapped.body.error.message).toContain('[path]');
+      expect(mapped.body.error.message).toContain('[redacted]');
+    });
   });
 });

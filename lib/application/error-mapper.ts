@@ -26,6 +26,36 @@ export interface HttpErrorResult {
   readonly body: ApiErrorResponse;
 }
 
+function sanitizeExtractionErrorMessage(rawMessage: string, code?: string): string {
+  if (code === 'CORRUPT_DOCUMENT') {
+    return 'The PDF document is corrupt, malformed, or has an invalid header.';
+  }
+  if (code === 'EMPTY_EXTRACTION') {
+    return 'No readable text could be extracted from the document. The document may be blank or unreadable.';
+  }
+  if (code === 'PASSWORD_PROTECTED') {
+    return 'The PDF document is password-protected and cannot be processed.';
+  }
+  if (code === 'OCR_FAILED') {
+    return 'OCR text recognition failed on one or more scanned pages.';
+  }
+
+  // Strip file system paths and secrets from message
+  const cleaned = rawMessage
+    .replace(/(?:\/[a-zA-Z0-9_.-]+){2,}/g, '[path]')
+    .replace(/(?:[a-zA-Z]:\\[a-zA-Z0-9_.-]+){2,}/g, '[path]')
+    .replace(/(?:Bearer\s+|key=)[a-zA-Z0-9_-]+/gi, '[redacted]')
+    .trim();
+
+  if (cleaned.startsWith('Failed to parse PDF:') || cleaned.startsWith('Extraction failed:')) {
+    return cleaned;
+  }
+
+  return cleaned.length > 0 && cleaned.length < 200
+    ? cleaned
+    : 'Failed to extract text from the uploaded document.';
+}
+
 /**
  * Maps domain and infrastructure errors to standard HTTP status codes and safe client error payloads.
  *
@@ -137,7 +167,7 @@ export function mapErrorToHttpResponse(error: unknown): HttpErrorResult {
         success: false,
         error: {
           code: error.code || 'EXTRACTION_FAILED',
-          message: 'Failed to extract text from the uploaded document.',
+          message: sanitizeExtractionErrorMessage(error.message, error.code),
         },
       },
     };
